@@ -124,7 +124,7 @@ export default function Home() {
             Browse by Category
           </h2>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Find exactly what you&apos;re looking for in our curated categories
+            Find exactly what {`you're`} looking for in our curated categories
           </p>
         </div>
 
