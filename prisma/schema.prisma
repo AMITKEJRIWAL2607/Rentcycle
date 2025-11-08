@@ -25,8 +25,10 @@ model User {
   sessions Session[]
 
   // Relationships
-  items    Item[]    @relation("OwnerItems")
-  bookings Booking[] @relation("RenterBookings")
+  items            Item[]    @relation("OwnerItems")
+  bookings         Booking[] @relation("RenterBookings")
+  sentMessages     Message[] @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
 
   @@map("users")
 }
@@ -104,9 +106,10 @@ model Booking {
 
   // Relationships
   itemId   String
-  item     Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  item     Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
   renterId String
-  renter   User   @relation("RenterBookings", fields: [renterId], references: [id], onDelete: Cascade)
+  renter   User      @relation("RenterBookings", fields: [renterId], references: [id], onDelete: Cascade)
+  messages Message[]
 
   @@map("bookings")
   @@index([itemId])
@@ -119,4 +122,26 @@ enum BookingStatus {
   CONFIRMED
   CANCELLED
   COMPLETED
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  content    String   @db.Text
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relationships
+  senderId   String
+  sender     User    @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId String
+  receiver   User    @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  bookingId  String
+  booking    Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+  @@index([bookingId])
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([isRead])
 }

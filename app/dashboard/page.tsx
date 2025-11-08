@@ -16,7 +16,25 @@ interface BookingWithRelations extends Booking {
   renter: Pick<User, 'id' | 'name' | 'email'>
 }
 
-type TabType = 'list' | 'my-items' | 'requests' | 'rentals'
+interface Message {
+  id: string
+  content: string
+  isRead: boolean
+  createdAt: Date | string
+  senderId: string
+  receiverId: string
+  sender: Pick<User, 'id' | 'name' | 'email' | 'image'>
+  receiver: Pick<User, 'id' | 'name' | 'email' | 'image'>
+}
+
+interface Conversation extends BookingWithRelations {
+  messages: Message[]
+  _count: {
+    messages: number
+  }
+}
+
+type TabType = 'list' | 'my-items' | 'requests' | 'rentals' | 'messages'
 
 export default function DashboardPage() {
   const { data: session, status } = useSession()
@@ -30,9 +48,15 @@ export default function DashboardPage() {
   const [myItems, setMyItems] = useState<ItemWithOwner[]>([])
   const [incomingRequests, setIncomingRequests] = useState<BookingWithRelations[]>([])
   const [myRentals, setMyRentals] = useState<BookingWithRelations[]>([])
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [selectedConversation, setSelectedConversation] = useState<string | null>(null)
+  const [messages, setMessages] = useState<Message[]>([])
+  const [newMessage, setNewMessage] = useState('')
+  const [sendingMessage, setSendingMessage] = useState(false)
   const [loading, setLoading] = useState(false)
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [pendingCount, setPendingCount] = useState(0)
+  const [unreadCount, setUnreadCount] = useState(0)
 
   // Form state for listing new item
   const [formData, setFormData] = useState({
@@ -85,6 +109,16 @@ export default function DashboardPage() {
         const response = await fetch(`/api/bookings?renterId=${userId}`)
         const data = await response.json()
         setMyRentals(data.bookings || [])
+      } else if (tab === 'messages') {
+        const response = await fetch(`/api/messages?userId=${userId}`)
+        const data = await response.json()
+        setConversations(data.conversations || [])
+        
+        // Count unread messages
+        const unread = (data.conversations || []).reduce((sum: number, conv: Conversation) => {
+          return sum + conv._count.messages
+        }, 0)
+        setUnreadCount(unread)
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
@@ -93,9 +127,10 @@ export default function DashboardPage() {
     }
   }, [userId])
   
-  // Fetch pending count on mount for notification badge
+  // Fetch pending count and unread messages on mount for notification badges
   useEffect(() => {
     if (userId) {
+      // Fetch pending requests count
       fetch(`/api/bookings?ownerId=${userId}`)
         .then(res => res.json())
         .then(data => {
@@ -103,6 +138,17 @@ export default function DashboardPage() {
           setPendingCount(bookings.filter((b: BookingWithRelations) => b.status === 'PENDING').length)
         })
         .catch(err => console.error('Error fetching pending count:', err))
+      
+      // Fetch unread messages count
+      fetch(`/api/messages?userId=${userId}`)
+        .then(res => res.json())
+        .then(data => {
+          const unread = (data.conversations || []).reduce((sum: number, conv: Conversation) => {
+            return sum + conv._count.messages
+          }, 0)
+          setUnreadCount(unread)
+        })
+        .catch(err => console.error('Error fetching unread count:', err))
     }
   }, [userId])
 
@@ -164,6 +210,74 @@ export default function DashboardPage() {
       ...formData,
       images: formData.images.filter((_, i) => i !== index),
     })
+  }
+  
+  const fetchConversationMessages = async (bookingId: string) => {
+    try {
+      const response = await fetch(`/api/messages?bookingId=${bookingId}`)
+      const data = await response.json()
+      setMessages(data.messages || [])
+      setSelectedConversation(bookingId)
+      
+      // Mark messages as read
+      await fetch('/api/messages', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId, userId }),
+      })
+      
+      // Update unread count
+      setUnreadCount(prev => {
+        const conv = conversations.find(c => c.id === bookingId)
+        return Math.max(0, prev - (conv?._count.messages || 0))
+      })
+    } catch (error) {
+      console.error('Error fetching messages:', error)
+    }
+  }
+  
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newMessage.trim() || !selectedConversation) return
+    
+    setSendingMessage(true)
+    try {
+      const conversation = conversations.find(c => c.id === selectedConversation)
+      if (!conversation) return
+      
+      // Determine receiver (the other party in the booking)
+      const isOwner = conversation.item.ownerId === userId
+      const receiverId = isOwner ? conversation.renterId : conversation.item.ownerId
+      
+      const response = await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookingId: selectedConversation,
+          senderId: userId,
+          receiverId,
+          content: newMessage,
+        }),
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setMessages(prev => [...prev, data.message])
+        setNewMessage('')
+        // Scroll to bottom
+        setTimeout(() => {
+          const messageContainer = document.getElementById('message-container')
+          if (messageContainer) {
+            messageContainer.scrollTop = messageContainer.scrollHeight
+          }
+        }, 100)
+      }
+    } catch (error) {
+      console.error('Error sending message:', error)
+      alert('Failed to send message. Please try again.')
+    } finally {
+      setSendingMessage(false)
+    }
   }
 
   const handleUpdateBookingStatus = async (bookingId: string, status: string, bookingDetails?: { itemTitle: string; renterName: string }) => {
@@ -233,6 +347,7 @@ export default function DashboardPage() {
     { id: 'my-items' as TabType, label: 'My Items', icon: '📦', count: 0 },
     { id: 'requests' as TabType, label: 'Incoming Requests', icon: '📥', count: pendingCount },
     { id: 'rentals' as TabType, label: 'My Rentals', icon: '🏠', count: 0 },
+    { id: 'messages' as TabType, label: 'Messages', icon: '💬', count: unreadCount },
   ]
   
   const filteredRequests = statusFilter === 'all' 
@@ -544,34 +659,48 @@ export default function DashboardPage() {
                             {booking.status}
                           </span>
                         </div>
-                        {booking.status === 'PENDING' && (
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleUpdateBookingStatus(booking.id, 'CONFIRMED', {
-                                itemTitle: booking.item.title,
-                                renterName: booking.renter.name || booking.renter.email
-                              })}
-                              className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center gap-2"
-                            >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                              Accept
-                            </button>
-                            <button
-                              onClick={() => handleUpdateBookingStatus(booking.id, 'CANCELLED', {
-                                itemTitle: booking.item.title,
-                                renterName: booking.renter.name || booking.renter.email
-                              })}
-                              className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center gap-2"
-                            >
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                              Decline
-                            </button>
-                          </div>
-                        )}
+                        <div className="flex flex-col sm:flex-row gap-2 mt-4">
+                          {booking.status === 'PENDING' && (
+                            <>
+                              <button
+                                onClick={() => handleUpdateBookingStatus(booking.id, 'CONFIRMED', {
+                                  itemTitle: booking.item.title,
+                                  renterName: booking.renter.name || booking.renter.email
+                                })}
+                                className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                Accept
+                              </button>
+                              <button
+                                onClick={() => handleUpdateBookingStatus(booking.id, 'CANCELLED', {
+                                  itemTitle: booking.item.title,
+                                  renterName: booking.renter.name || booking.renter.email
+                                })}
+                                className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                                Decline
+                              </button>
+                            </>
+                          )}
+                          <button
+                            onClick={() => {
+                              setActiveTab('messages')
+                              setTimeout(() => fetchConversationMessages(booking.id), 100)
+                            }}
+                            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                            Message
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -647,16 +776,233 @@ export default function DashboardPage() {
                       <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${getStatusColor(booking.status)}`}>
                         {booking.status}
                       </span>
-                      {booking.status === 'PENDING' && (
+                      <div className="flex gap-2 mt-3">
+                        {booking.status === 'PENDING' && (
+                          <button
+                            onClick={() => handleUpdateBookingStatus(booking.id, 'CANCELLED')}
+                            className="bg-red-600 hover:bg-red-700 text-white font-semibold py-1 px-4 rounded-lg transition-colors text-sm"
+                          >
+                            Cancel
+                          </button>
+                        )}
                         <button
-                          onClick={() => handleUpdateBookingStatus(booking.id, 'CANCELLED')}
-                          className="ml-3 bg-red-600 hover:bg-red-700 text-white font-semibold py-1 px-4 rounded-lg transition-colors text-sm"
+                          onClick={() => {
+                            setActiveTab('messages')
+                            setTimeout(() => fetchConversationMessages(booking.id), 100)
+                          }}
+                          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-1 px-4 rounded-lg transition-colors text-sm flex items-center gap-1"
                         >
-                          Cancel
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          </svg>
+                          Message
                         </button>
-                      )}
+                      </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'messages' && (
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">Messages</h2>
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              ) : conversations.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-600 mb-4">No messages yet.</p>
+                  <p className="text-sm text-gray-500">Messages will appear here when you communicate with renters or owners about bookings.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Conversations List */}
+                  <div className="lg:col-span-1 space-y-2">
+                    <h3 className="font-semibold text-gray-700 mb-3">Conversations</h3>
+                    <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                      {conversations.map((conversation) => {
+                        const otherUser = conversation.item.ownerId === userId 
+                          ? conversation.renter 
+                          : conversation.item.owner
+                        const lastMessage = conversation.messages[0]
+                        const hasUnread = conversation._count.messages > 0
+                        
+                        return (
+                          <button
+                            key={conversation.id}
+                            onClick={() => fetchConversationMessages(conversation.id)}
+                            className={`w-full text-left p-4 rounded-lg border transition-all ${
+                              selectedConversation === conversation.id
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                {otherUser.image ? (
+                                  <img
+                                    src={otherUser.image}
+                                    alt={otherUser.name || 'User'}
+                                    className="w-10 h-10 rounded-full flex-shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                                    <span className="text-blue-600 text-sm font-semibold">
+                                      {(otherUser.name || otherUser.email).charAt(0).toUpperCase()}
+                                    </span>
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className={`font-semibold truncate ${hasUnread ? 'text-blue-600' : 'text-gray-900'}`}>
+                                    {otherUser.name || otherUser.email}
+                                  </p>
+                                  <p className="text-xs text-gray-500 truncate">{conversation.item.title}</p>
+                                </div>
+                              </div>
+                              {hasUnread && (
+                                <span className="bg-blue-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">
+                                  {conversation._count.messages}
+                                </span>
+                              )}
+                            </div>
+                            {lastMessage && (
+                              <p className="text-sm text-gray-600 truncate">
+                                {lastMessage.sender.id === userId ? 'You: ' : ''}
+                                {lastMessage.content}
+                              </p>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Messages View */}
+                  <div className="lg:col-span-2">
+                    {selectedConversation ? (
+                      <div className="border border-gray-200 rounded-lg h-[600px] flex flex-col">
+                        {/* Header */}
+                        <div className="p-4 border-b border-gray-200 bg-gray-50">
+                          {(() => {
+                            const conversation = conversations.find(c => c.id === selectedConversation)
+                            if (!conversation) return null
+                            const otherUser = conversation.item.ownerId === userId 
+                              ? conversation.renter 
+                              : conversation.item.owner
+                            
+                            return (
+                              <div>
+                                <div className="flex items-center gap-3 mb-2">
+                                  {otherUser.image ? (
+                                    <img
+                                      src={otherUser.image}
+                                      alt={otherUser.name || 'User'}
+                                      className="w-10 h-10 rounded-full"
+                                    />
+                                  ) : (
+                                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                                      <span className="text-blue-600 font-semibold">
+                                        {(otherUser.name || otherUser.email).charAt(0).toUpperCase()}
+                                      </span>
+                                    </div>
+                                  )}
+                                  <div>
+                                    <p className="font-semibold text-gray-900">{otherUser.name || otherUser.email}</p>
+                                    <Link
+                                      href={`/items/${conversation.item.id}`}
+                                      className="text-sm text-blue-600 hover:text-blue-700"
+                                    >
+                                      {conversation.item.title}
+                                    </Link>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 text-xs text-gray-500">
+                                  <span className={`px-2 py-1 rounded-full ${getStatusColor(conversation.status)}`}>
+                                    {conversation.status}
+                                  </span>
+                                  <span>•</span>
+                                  <span>{formatDate(conversation.startDate)} - {formatDate(conversation.endDate)}</span>
+                                </div>
+                              </div>
+                            )
+                          })()}
+                        </div>
+
+                        {/* Messages */}
+                        <div 
+                          id="message-container"
+                          className="flex-1 p-4 overflow-y-auto space-y-4"
+                        >
+                          {messages.length === 0 ? (
+                            <div className="text-center text-gray-500 py-8">
+                              <p>No messages yet. Start the conversation!</p>
+                            </div>
+                          ) : (
+                            messages.map((message) => {
+                              const isOwn = message.senderId === userId
+                              return (
+                                <div
+                                  key={message.id}
+                                  className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
+                                >
+                                  <div className={`max-w-[70%] ${isOwn ? 'order-2' : 'order-1'}`}>
+                                    <div
+                                      className={`rounded-lg px-4 py-2 ${
+                                        isOwn
+                                          ? 'bg-blue-600 text-white'
+                                          : 'bg-gray-100 text-gray-900'
+                                      }`}
+                                    >
+                                      <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                                    </div>
+                                    <p className={`text-xs text-gray-500 mt-1 ${isOwn ? 'text-right' : 'text-left'}`}>
+                                      {new Date(message.createdAt).toLocaleTimeString([], {
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                      })}
+                                    </p>
+                                  </div>
+                                </div>
+                              )
+                            })
+                          )}
+                        </div>
+
+                        {/* Input */}
+                        <form onSubmit={handleSendMessage} className="p-4 border-t border-gray-200">
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={newMessage}
+                              onChange={(e) => setNewMessage(e.target.value)}
+                              placeholder="Type your message..."
+                              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              disabled={sendingMessage}
+                            />
+                            <button
+                              type="submit"
+                              disabled={sendingMessage || !newMessage.trim()}
+                              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold px-6 py-2 rounded-lg transition-colors"
+                            >
+                              {sendingMessage ? 'Sending...' : 'Send'}
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+                    ) : (
+                      <div className="border border-gray-200 rounded-lg h-[600px] flex items-center justify-center text-gray-500">
+                        <div className="text-center">
+                          <svg className="w-16 h-16 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          </svg>
+                          <p>Select a conversation to view messages</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
