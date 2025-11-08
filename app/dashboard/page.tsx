@@ -137,6 +137,19 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchDashboardData(activeTab)
   }, [activeTab, fetchDashboardData])
+  
+  // Auto-open conversation when switching to messages tab with a selected conversation
+  useEffect(() => {
+    if (activeTab === 'messages' && selectedConversation && conversations.length > 0) {
+      // Check if we need to load messages for this conversation
+      const hasMessages = messages.length > 0 && 
+        conversations.find(c => c.id === selectedConversation)
+      
+      if (!hasMessages) {
+        fetchConversationMessages(selectedConversation)
+      }
+    }
+  }, [activeTab, selectedConversation, conversations])
 
   const handleSubmitItem = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -693,8 +706,8 @@ export default function DashboardPage() {
                           )}
                           <button
                             onClick={() => {
+                              setSelectedConversation(booking.id)
                               setActiveTab('messages')
-                              setTimeout(() => fetchConversationMessages(booking.id), 100)
                             }}
                             className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
                           >
@@ -790,8 +803,8 @@ export default function DashboardPage() {
                         )}
                         <button
                           onClick={() => {
+                            setSelectedConversation(booking.id)
                             setActiveTab('messages')
-                            setTimeout(() => fetchConversationMessages(booking.id), 100)
                           }}
                           className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-1 px-4 rounded-lg transition-colors text-sm flex items-center gap-1"
                         >
