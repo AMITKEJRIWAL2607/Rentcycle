@@ -47,12 +47,13 @@ export default function DashboardPage() {
   
   // Set initial tab from URL parameter (must be before conditional returns)
   const initialTab = (searchParams.get('tab') as TabType) || 'list'
+  const bookingIdFromUrl = searchParams.get('bookingId')
   const [activeTab, setActiveTab] = useState<TabType>(initialTab)
   const [myItems, setMyItems] = useState<ItemWithOwner[]>([])
   const [incomingRequests, setIncomingRequests] = useState<BookingWithRelations[]>([])
   const [myRentals, setMyRentals] = useState<BookingWithRelations[]>([])
   const [conversations, setConversations] = useState<Conversation[]>([])
-  const [selectedConversation, setSelectedConversation] = useState<string | null>(null)
+  const [selectedConversation, setSelectedConversation] = useState<string | null>(bookingIdFromUrl)
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [sendingMessage, setSendingMessage] = useState(false)
@@ -389,6 +390,12 @@ export default function DashboardPage() {
                 onClick={() => {
                   setActiveTab(tab.id)
                   setStatusFilter('all') // Reset filter when changing tabs
+                  // Update URL without bookingId when switching tabs
+                  if (tab.id !== 'messages') {
+                    router.push(`/dashboard?tab=${tab.id}`, { scroll: false })
+                  } else {
+                    router.push(`/dashboard?tab=messages`, { scroll: false })
+                  }
                 }}
                 className={`flex-1 px-6 py-4 text-center font-semibold transition-colors relative ${
                   activeTab === tab.id
@@ -707,8 +714,7 @@ export default function DashboardPage() {
                           )}
                           <button
                             onClick={() => {
-                              setSelectedConversation(booking.id)
-                              setActiveTab('messages')
+                              router.push(`/dashboard?tab=messages&bookingId=${booking.id}`)
                             }}
                             className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
                           >
@@ -804,8 +810,7 @@ export default function DashboardPage() {
                         )}
                         <button
                           onClick={() => {
-                            setSelectedConversation(booking.id)
-                            setActiveTab('messages')
+                            router.push(`/dashboard?tab=messages&bookingId=${booking.id}`)
                           }}
                           className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-1 px-4 rounded-lg transition-colors text-sm flex items-center gap-1"
                         >
@@ -850,7 +855,11 @@ export default function DashboardPage() {
                         return (
                           <button
                             key={conversation.id}
-                            onClick={() => fetchConversationMessages(conversation.id)}
+                            onClick={() => {
+                              setSelectedConversation(conversation.id)
+                              router.push(`/dashboard?tab=messages&bookingId=${conversation.id}`, { scroll: false })
+                              fetchConversationMessages(conversation.id)
+                            }}
                             className={`w-full text-left p-4 rounded-lg border transition-all ${
                               selectedConversation === conversation.id
                                 ? 'border-blue-500 bg-blue-50'
