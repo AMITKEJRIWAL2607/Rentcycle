@@ -167,7 +167,7 @@ export default function DashboardPage() {
     }
     
     fetchCounts()
-  }, [userId])
+  }, [userId, getEffectiveUserId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Watch for URL parameter changes and update state accordingly
   useEffect(() => {
@@ -181,6 +181,7 @@ export default function DashboardPage() {
     if (bookingIdFromUrlNow && bookingIdFromUrlNow !== selectedConversation) {
       setSelectedConversation(bookingIdFromUrlNow)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
   
   useEffect(() => {
@@ -196,6 +197,7 @@ export default function DashboardPage() {
         fetchConversationMessages(selectedConversation)
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, selectedConversation, conversations.length])
 
   const handleSubmitItem = async (e: React.FormEvent) => {
@@ -621,7 +623,7 @@ export default function DashboardPage() {
                 </div>
               ) : myItems.length === 0 ? (
                 <div className="text-center py-12">
-                  <p className="text-gray-600 mb-4">You haven't listed any items yet.</p>
+                  <p className="text-gray-600 mb-4">You haven&apos;t listed any items yet.</p>
                   <button
                     onClick={() => setActiveTab('list')}
                     className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
@@ -802,7 +804,7 @@ export default function DashboardPage() {
               ) : filteredRentals.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-gray-600 mb-4">
-                    {statusFilter === 'all' ? "You haven't rented any items yet." : `No ${statusFilter.toLowerCase()} rentals.`}
+                    {statusFilter === 'all' ? "You haven&apos;t rented any items yet." : `No ${statusFilter.toLowerCase()} rentals.`}
                   </p>
                   {statusFilter === 'all' && (
                     <Link
