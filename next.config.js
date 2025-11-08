@@ -1,13 +1,30 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    domains: [],
+    // Allow images from external sources (Unsplash, UploadThing, etc.)
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'i.pravatar.cc',
+      },
+      {
+        protocol: 'https',
+        hostname: 'utfs.io', // UploadThing CDN
+      },
+      {
+        protocol: 'https',
+        hostname: '*.uploadthing.com',
+      },
+    ],
   },
-  // Add webpack configuration to handle Windows path and symlink issues
-  webpack: (config, { isServer }) => {
-    // Fix for Windows EINVAL errors with server-reference-manifest.js
-    // This is especially common with OneDrive which uses symlinks
-    if (process.platform === 'win32') {
+  // Add webpack configuration to handle Windows path and symlink issues (development only)
+  webpack: (config, { isServer, dev }) => {
+    // Only apply Windows-specific fixes in development
+    if (dev && process.platform === 'win32') {
       // Disable symlink resolution to avoid EINVAL errors on Windows
       config.resolve.symlinks = false
       

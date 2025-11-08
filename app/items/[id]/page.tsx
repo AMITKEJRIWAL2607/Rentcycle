@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
+import Image from 'next/image'
 import type { Item, User, Booking } from '@prisma/client'
 
 interface BookingWithDates extends Pick<Booking, 'id' | 'startDate' | 'endDate' | 'status'> {}
@@ -24,13 +25,8 @@ export default function ItemDetailPage() {
   const [selectedEndDate, setSelectedEndDate] = useState('')
   const [isRequesting, setIsRequesting] = useState(false)
 
-  useEffect(() => {
-    if (params.id) {
-      fetchItem()
-    }
-  }, [params.id])
-
-  const fetchItem = async () => {
+  const fetchItem = useCallback(async () => {
+    if (!params.id) return
     try {
       setLoading(true)
       const response = await fetch(`/api/items/${params.id}`)
@@ -45,7 +41,13 @@ export default function ItemDetailPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [params.id, router])
+
+  useEffect(() => {
+    if (params.id) {
+      fetchItem()
+    }
+  }, [params.id, fetchItem])
 
   const handleRequestToRent = async () => {
     if (!selectedStartDate || !selectedEndDate) {
@@ -243,10 +245,12 @@ export default function ItemDetailPage() {
                 <>
                   {/* Main Image */}
                   <div className="relative h-96 bg-gray-200">
-                    <img
+                    <Image
                       src={item.images[selectedImageIndex]}
                       alt={item.title}
-                      className="w-full h-full object-cover"
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 66vw, 50vw"
                     />
                   </div>
                   {/* Thumbnail Gallery */}
@@ -262,10 +266,12 @@ export default function ItemDetailPage() {
                               : 'border-transparent hover:border-gray-300'
                           }`}
                         >
-                          <img
+                          <Image
                             src={image}
                             alt={`${item.title} ${index + 1}`}
-                            className="w-full h-full object-cover"
+                            fill
+                            className="object-cover"
+                            sizes="(max-width: 768px) 25vw, 25vw"
                           />
                         </button>
                       ))}
@@ -523,9 +529,11 @@ export default function ItemDetailPage() {
               </h2>
               <div className="flex items-center mb-4">
                 {item.owner.image ? (
-                  <img
+                  <Image
                     src={item.owner.image}
                     alt={item.owner.name || 'Owner'}
+                    width={64}
+                    height={64}
                     className="w-16 h-16 rounded-full mr-4"
                   />
                 ) : (

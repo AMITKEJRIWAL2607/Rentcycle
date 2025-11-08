@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useState, Suspense, useCallback } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useSearchParams } from 'next/navigation'
 import type { Item, User } from '@prisma/client'
 
@@ -44,11 +45,7 @@ function ItemsPageContent() {
   const [maxPrice, setMaxPrice] = useState('')
   const [priceRange, setPriceRange] = useState({ min: 0, max: 1000 })
 
-  useEffect(() => {
-    fetchItems()
-  }, [selectedCategory, searchQuery, minPrice, maxPrice])
-
-  const fetchItems = async () => {
+  const fetchItems = useCallback(async () => {
     try {
       setLoading(true)
       const params = new URLSearchParams()
@@ -86,7 +83,11 @@ function ItemsPageContent() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [selectedCategory, searchQuery, minPrice, maxPrice])
+
+  useEffect(() => {
+    fetchItems()
+  }, [fetchItems])
 
   const handleFilterChange = () => {
     fetchItems()
@@ -264,10 +265,12 @@ function ItemsPageContent() {
                     {/* Image */}
                     <div className="relative h-48 bg-gray-200 overflow-hidden">
                       {item.images && item.images.length > 0 ? (
-                        <img
+                        <Image
                           src={item.images[0]}
                           alt={item.title}
-                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                          fill
+                          className="object-cover group-hover:scale-110 transition-transform duration-300"
+                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">

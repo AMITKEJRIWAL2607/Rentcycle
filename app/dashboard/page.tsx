@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { UploadButton } from '@/lib/uploadthing'
 import type { Item, Booking, User } from '@prisma/client'
 
@@ -581,11 +582,13 @@ export default function DashboardPage() {
                   {formData.images.length > 0 && (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4">
                       {formData.images.map((image, index) => (
-                        <div key={index} className="relative group">
-                          <img
+                        <div key={index} className="relative group h-32">
+                          <Image
                             src={image}
                             alt={`Image ${index + 1}`}
-                            className="w-full h-32 object-cover rounded-lg border border-gray-200"
+                            fill
+                            className="object-cover rounded-lg border border-gray-200"
+                            sizes="(max-width: 768px) 50vw, 25vw"
                           />
                           <button
                             type="button"
@@ -640,11 +643,15 @@ export default function DashboardPage() {
                       className="bg-gray-50 rounded-xl p-4 hover:shadow-lg transition-shadow border border-gray-200"
                     >
                       {item.images && item.images.length > 0 ? (
-                        <img
-                          src={item.images[0]}
-                          alt={item.title}
-                          className="w-full h-40 object-cover rounded-lg mb-3"
-                        />
+                        <div className="relative w-full h-40 mb-3">
+                          <Image
+                            src={item.images[0]}
+                            alt={item.title}
+                            fill
+                            className="object-cover rounded-lg"
+                            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                          />
+                        </div>
                       ) : (
                         <div className="w-full h-40 bg-gray-200 rounded-lg mb-3 flex items-center justify-center">
                           <span className="text-gray-400">No Image</span>
@@ -915,9 +922,11 @@ export default function DashboardPage() {
                             <div className="flex items-start justify-between mb-2">
                               <div className="flex items-center gap-3 flex-1 min-w-0">
                                 {otherUser.image ? (
-                                  <img
+                                  <Image
                                     src={otherUser.image}
                                     alt={otherUser.name || 'User'}
+                                    width={40}
+                                    height={40}
                                     className="w-10 h-10 rounded-full flex-shrink-0"
                                   />
                                 ) : (
@@ -969,9 +978,11 @@ export default function DashboardPage() {
                               <div>
                                 <div className="flex items-center gap-3 mb-2">
                                   {otherUser.image ? (
-                                    <img
+                                    <Image
                                       src={otherUser.image}
                                       alt={otherUser.name || 'User'}
+                                      width={40}
+                                      height={40}
                                       className="w-10 h-10 rounded-full"
                                     />
                                   ) : (
