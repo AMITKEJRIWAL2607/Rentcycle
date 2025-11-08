@@ -8,12 +8,12 @@ import { UploadButton } from '@/lib/uploadthing'
 import type { Item, Booking, User } from '@prisma/client'
 
 interface ItemWithOwner extends Item {
-  owner: Pick<User, 'id' | 'name' | 'email'>
+  owner: Pick<User, 'id' | 'name' | 'email' | 'image'>
 }
 
 interface BookingWithRelations extends Booking {
   item: ItemWithOwner
-  renter: Pick<User, 'id' | 'name' | 'email'>
+  renter: Pick<User, 'id' | 'name' | 'email' | 'image'>
 }
 
 interface Message {
