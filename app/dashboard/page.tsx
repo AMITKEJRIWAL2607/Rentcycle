@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { UploadButton } from '@/lib/uploadthing'
 import type { Item, Booking, User } from '@prisma/client'
@@ -21,32 +21,18 @@ type TabType = 'list' | 'my-items' | 'requests' | 'rentals'
 export default function DashboardPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const userId = session?.user?.id
-
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/login')
-    }
-  }, [status, router])
-
-  if (status === 'loading') {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    )
-  }
-
-  if (!userId) {
-    return null
-  }
-
-  const [activeTab, setActiveTab] = useState<TabType>('list')
+  
+  // Set initial tab from URL parameter (must be before conditional returns)
+  const initialTab = (searchParams.get('tab') as TabType) || 'list'
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab)
   const [myItems, setMyItems] = useState<ItemWithOwner[]>([])
   const [incomingRequests, setIncomingRequests] = useState<BookingWithRelations[]>([])
   const [myRentals, setMyRentals] = useState<BookingWithRelations[]>([])
   const [loading, setLoading] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [pendingCount, setPendingCount] = useState(0)
 
   // Form state for listing new item
   const [formData, setFormData] = useState({
@@ -59,6 +45,25 @@ export default function DashboardPage() {
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [uploadingImages, setUploadingImages] = useState(false)
+  
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/login')
+    }
+  }, [status, router])
+  
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
+  if (!userId) {
+    return null
+  }
 
   const fetchDashboardData = useCallback(async (tab: TabType) => {
     if (!userId || tab === 'list') return
@@ -72,7 +77,10 @@ export default function DashboardPage() {
       } else if (tab === 'requests') {
         const response = await fetch(`/api/bookings?ownerId=${userId}`)
         const data = await response.json()
-        setIncomingRequests(data.bookings || [])
+        const bookings = data.bookings || []
+        setIncomingRequests(bookings)
+        // Count pending requests
+        setPendingCount(bookings.filter((b: BookingWithRelations) => b.status === 'PENDING').length)
       } else if (tab === 'rentals') {
         const response = await fetch(`/api/bookings?renterId=${userId}`)
         const data = await response.json()
@@ -82,6 +90,19 @@ export default function DashboardPage() {
       console.error('Error fetching dashboard data:', error)
     } finally {
       setLoading(false)
+    }
+  }, [userId])
+  
+  // Fetch pending count on mount for notification badge
+  useEffect(() => {
+    if (userId) {
+      fetch(`/api/bookings?ownerId=${userId}`)
+        .then(res => res.json())
+        .then(data => {
+          const bookings = data.bookings || []
+          setPendingCount(bookings.filter((b: BookingWithRelations) => b.status === 'PENDING').length)
+        })
+        .catch(err => console.error('Error fetching pending count:', err))
     }
   }, [userId])
 
@@ -145,7 +166,17 @@ export default function DashboardPage() {
     })
   }
 
-  const handleUpdateBookingStatus = async (bookingId: string, status: string) => {
+  const handleUpdateBookingStatus = async (bookingId: string, status: string, bookingDetails?: { itemTitle: string; renterName: string }) => {
+    // Confirmation dialog
+    const actionText = status === 'CONFIRMED' ? 'approve' : status === 'CANCELLED' ? 'decline' : 'update'
+    const confirmMessage = bookingDetails
+      ? `Are you sure you want to ${actionText} the booking request for "${bookingDetails.itemTitle}" from ${bookingDetails.renterName}?`
+      : `Are you sure you want to ${actionText} this booking?`
+    
+    if (!confirm(confirmMessage)) {
+      return
+    }
+
     try {
       const response = await fetch(`/api/bookings/${bookingId}`, {
         method: 'PATCH',
@@ -159,6 +190,15 @@ export default function DashboardPage() {
         throw new Error('Failed to update booking')
       }
 
+      // Success message
+      const successMessage = status === 'CONFIRMED' 
+        ? '✅ Booking approved! The renter has been notified.' 
+        : status === 'CANCELLED'
+        ? '❌ Booking declined.' 
+        : '✅ Booking updated successfully!'
+      
+      alert(successMessage)
+      
       fetchDashboardData(activeTab)
     } catch (error) {
       console.error('Error updating booking:', error)
@@ -189,11 +229,19 @@ export default function DashboardPage() {
   }
 
   const tabs = [
-    { id: 'list' as TabType, label: 'List New Item', icon: '➕' },
-    { id: 'my-items' as TabType, label: 'My Items', icon: '📦' },
-    { id: 'requests' as TabType, label: 'Incoming Requests', icon: '📥' },
-    { id: 'rentals' as TabType, label: 'My Rentals', icon: '🏠' },
+    { id: 'list' as TabType, label: 'List New Item', icon: '➕', count: 0 },
+    { id: 'my-items' as TabType, label: 'My Items', icon: '📦', count: 0 },
+    { id: 'requests' as TabType, label: 'Incoming Requests', icon: '📥', count: pendingCount },
+    { id: 'rentals' as TabType, label: 'My Rentals', icon: '🏠', count: 0 },
   ]
+  
+  const filteredRequests = statusFilter === 'all' 
+    ? incomingRequests 
+    : incomingRequests.filter(b => b.status === statusFilter)
+    
+  const filteredRentals = statusFilter === 'all'
+    ? myRentals
+    : myRentals.filter(b => b.status === statusFilter)
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -206,8 +254,11 @@ export default function DashboardPage() {
             {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 px-6 py-4 text-center font-semibold transition-colors ${
+                onClick={() => {
+                  setActiveTab(tab.id)
+                  setStatusFilter('all') // Reset filter when changing tabs
+                }}
+                className={`flex-1 px-6 py-4 text-center font-semibold transition-colors relative ${
                   activeTab === tab.id
                     ? 'text-blue-600 border-b-2 border-blue-600'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -215,6 +266,11 @@ export default function DashboardPage() {
               >
                 <span className="mr-2">{tab.icon}</span>
                 {tab.label}
+                {tab.count > 0 && (
+                  <span className="absolute top-2 right-2 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                    {tab.count}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -431,18 +487,36 @@ export default function DashboardPage() {
 
           {activeTab === 'requests' && (
             <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">Incoming Rental Requests</h2>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4 sm:mb-0">Incoming Rental Requests</h2>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-semibold text-gray-700">Filter:</label>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="PENDING">Pending</option>
+                    <option value="CONFIRMED">Confirmed</option>
+                    <option value="CANCELLED">Cancelled</option>
+                    <option value="COMPLETED">Completed</option>
+                  </select>
+                </div>
+              </div>
               {loading ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                 </div>
-              ) : incomingRequests.length === 0 ? (
+              ) : filteredRequests.length === 0 ? (
                 <div className="text-center py-12">
-                  <p className="text-gray-600">No rental requests yet.</p>
+                  <p className="text-gray-600">
+                    {statusFilter === 'all' ? 'No rental requests yet.' : `No ${statusFilter.toLowerCase()} requests.`}
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {incomingRequests.map((booking) => (
+                  {filteredRequests.map((booking) => (
                     <div
                       key={booking.id}
                       className="border border-gray-200 rounded-xl p-6 hover:shadow-md transition-shadow"
@@ -473,15 +547,27 @@ export default function DashboardPage() {
                         {booking.status === 'PENDING' && (
                           <div className="flex gap-2">
                             <button
-                              onClick={() => handleUpdateBookingStatus(booking.id, 'CONFIRMED')}
-                              className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+                              onClick={() => handleUpdateBookingStatus(booking.id, 'CONFIRMED', {
+                                itemTitle: booking.item.title,
+                                renterName: booking.renter.name || booking.renter.email
+                              })}
+                              className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center gap-2"
                             >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
                               Accept
                             </button>
                             <button
-                              onClick={() => handleUpdateBookingStatus(booking.id, 'CANCELLED')}
-                              className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+                              onClick={() => handleUpdateBookingStatus(booking.id, 'CANCELLED', {
+                                itemTitle: booking.item.title,
+                                renterName: booking.renter.name || booking.renter.email
+                              })}
+                              className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center gap-2"
                             >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
                               Decline
                             </button>
                           </div>
@@ -496,24 +582,44 @@ export default function DashboardPage() {
 
           {activeTab === 'rentals' && (
             <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">My Rentals</h2>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4 sm:mb-0">My Rentals</h2>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-semibold text-gray-700">Filter:</label>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="PENDING">Pending</option>
+                    <option value="CONFIRMED">Confirmed</option>
+                    <option value="CANCELLED">Cancelled</option>
+                    <option value="COMPLETED">Completed</option>
+                  </select>
+                </div>
+              </div>
               {loading ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                 </div>
-              ) : myRentals.length === 0 ? (
+              ) : filteredRentals.length === 0 ? (
                 <div className="text-center py-12">
-                  <p className="text-gray-600 mb-4">You haven't rented any items yet.</p>
-                  <Link
-                    href="/items"
-                    className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
-                  >
-                    Browse Items
-                  </Link>
+                  <p className="text-gray-600 mb-4">
+                    {statusFilter === 'all' ? "You haven't rented any items yet." : `No ${statusFilter.toLowerCase()} rentals.`}
+                  </p>
+                  {statusFilter === 'all' && (
+                    <Link
+                      href="/items"
+                      className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
+                    >
+                      Browse Items
+                    </Link>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {myRentals.map((booking) => (
+                  {filteredRentals.map((booking) => (
                     <div
                       key={booking.id}
                       className="border border-gray-200 rounded-xl p-6 hover:shadow-md transition-shadow"

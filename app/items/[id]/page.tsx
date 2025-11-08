@@ -114,7 +114,7 @@ export default function ItemDetailPage() {
         throw new Error(data.error || 'Failed to create booking')
       }
 
-      alert(`Booking requested successfully! Total: $${totalPrice.toFixed(2)} for ${days} days.`)
+      alert(`✅ Booking requested successfully!\n\n📅 Dates: ${new Date(selectedStartDate).toLocaleDateString()} - ${new Date(selectedEndDate).toLocaleDateString()}\n💰 Total: $${totalPrice.toFixed(2)} for ${days} days\n\n⏳ Waiting for owner approval. You can check the status in your Dashboard > My Rentals.`)
       
       // Refresh item data to show new booking
       fetchItem()
@@ -122,6 +122,11 @@ export default function ItemDetailPage() {
       // Reset dates
       setSelectedStartDate('')
       setSelectedEndDate('')
+      
+      // Suggest going to dashboard
+      if (confirm('Go to your dashboard to track this request?')) {
+        router.push('/dashboard?tab=rentals')
+      }
     } catch (error: any) {
       console.error('Error creating booking:', error)
       alert(error.message || 'Failed to create booking. Please try again.')
