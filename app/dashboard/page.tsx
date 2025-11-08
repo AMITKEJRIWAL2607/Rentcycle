@@ -141,15 +141,13 @@ export default function DashboardPage() {
   // Auto-open conversation when switching to messages tab with a selected conversation
   useEffect(() => {
     if (activeTab === 'messages' && selectedConversation && conversations.length > 0) {
-      // Check if we need to load messages for this conversation
-      const hasMessages = messages.length > 0 && 
-        conversations.find(c => c.id === selectedConversation)
-      
-      if (!hasMessages) {
+      // Only fetch if this conversation exists in the list
+      const conversationExists = conversations.find(c => c.id === selectedConversation)
+      if (conversationExists) {
         fetchConversationMessages(selectedConversation)
       }
     }
-  }, [activeTab, selectedConversation, conversations])
+  }, [activeTab, conversations.length]) // Removed selectedConversation from deps to prevent double-trigger
 
   const handleSubmitItem = async (e: React.FormEvent) => {
     e.preventDefault()
