@@ -138,6 +138,20 @@ export default function DashboardPage() {
     }
   }, [userId])
 
+  // Watch for URL parameter changes and update state accordingly
+  useEffect(() => {
+    const tabFromUrl = (searchParams.get('tab') as TabType) || 'list'
+    const bookingIdFromUrlNow = searchParams.get('bookingId')
+    
+    if (tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl)
+    }
+    
+    if (bookingIdFromUrlNow && bookingIdFromUrlNow !== selectedConversation) {
+      setSelectedConversation(bookingIdFromUrlNow)
+    }
+  }, [searchParams])
+  
   useEffect(() => {
     fetchDashboardData(activeTab)
   }, [activeTab, fetchDashboardData])
@@ -151,7 +165,7 @@ export default function DashboardPage() {
         fetchConversationMessages(selectedConversation)
       }
     }
-  }, [activeTab, conversations.length]) // Removed selectedConversation from deps to prevent double-trigger
+  }, [activeTab, selectedConversation, conversations.length])
 
   const handleSubmitItem = async (e: React.FormEvent) => {
     e.preventDefault()
