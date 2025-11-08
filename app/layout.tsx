@@ -17,14 +17,21 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={inter.className} suppressHydrationWarning>
-        <Providers>
-          <Header />
-          {children}
-        </Providers>
-      </body>
-    </html>
+      <html lang="en" suppressHydrationWarning>
+        <body className={inter.className} suppressHydrationWarning>
+          <Providers>
+            <div className="bg-yellow-50 border-b border-yellow-200">
+              <div className="container mx-auto px-4 py-2">
+                <p className="text-sm text-yellow-800 text-center">
+                  <span className="font-semibold">Demo Mode:</span> You can browse and test all features without logging in. Changes will be saved to a demo account.
+                </p>
+              </div>
+            </div>
+            <Header />
+            {children}
+          </Providers>
+        </body>
+      </html>
   )
 }
 

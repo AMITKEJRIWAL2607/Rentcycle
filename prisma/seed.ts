@@ -19,6 +19,17 @@ async function main() {
   console.log('👥 Creating dummy users...')
   const hashedPassword = await bcrypt.hash('password123', 10)
 
+  // Create demo user first (for demo mode)
+  const demoUser = await prisma.user.upsert({
+    where: { email: 'demo@rentcycle.com' },
+    update: {},
+    create: {
+      name: 'Demo User',
+      email: 'demo@rentcycle.com',
+      image: 'https://i.pravatar.cc/150?img=68',
+    },
+  })
+
   const users = await Promise.all([
     prisma.user.create({
       data: {
@@ -467,11 +478,13 @@ async function main() {
 
   console.log('\n🎉 Seed completed successfully!')
   console.log('\n📊 Summary:')
-  console.log(`   👥 Users: ${users.length}`)
+  console.log(`   👥 Users: ${users.length + 1} (including demo user)`)
   console.log(`   📦 Items: ${items.length}`)
   console.log(`   📅 Bookings: ${bookings.length}`)
   console.log(`   💬 Messages: ${messages.length}`)
-  console.log('\n💡 You can login with any of these accounts:')
+  console.log('\n💡 Demo Mode:')
+  console.log('   The app works without login - uses demo@rentcycle.com automatically')
+  console.log('\n💡 You can also login with any of these accounts:')
   console.log('   Email: john@example.com, sarah@example.com, mike@example.com, emily@example.com, or david@example.com')
   console.log('   Password: password123')
 }

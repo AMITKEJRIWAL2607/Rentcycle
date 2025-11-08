@@ -74,29 +74,55 @@ export default function DashboardPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [uploadingImages, setUploadingImages] = useState(false)
   
+  // Get effective user ID (session or demo user) - defined early for use in callbacks
+  const getEffectiveUserId = useCallback(async () => {
+    if (userId) return userId
+    try {
+      const response = await fetch('/api/demo-user')
+      const data = await response.json()
+      return data.userId
+    } catch (error) {
+      console.error('Error fetching demo user:', error)
+      return null
+    }
+  }, [userId])
+  
   // All hooks must be called before any conditional returns
   const fetchDashboardData = useCallback(async (tab: TabType) => {
-    if (!userId || tab === 'list') return
+    // In demo mode, fetch demo user ID if no session
+    let effectiveUserId = userId
+    if (!effectiveUserId) {
+      try {
+        const response = await fetch('/api/demo-user')
+        const data = await response.json()
+        effectiveUserId = data.userId
+      } catch (error) {
+        console.error('Error fetching demo user:', error)
+        return
+      }
+    }
+    
+    if (!effectiveUserId || tab === 'list') return
     
     setLoading(true)
     try {
       if (tab === 'my-items') {
-        const response = await fetch(`/api/items?ownerId=${userId}`)
+        const response = await fetch(`/api/items?ownerId=${effectiveUserId}`)
         const data = await response.json()
         setMyItems(data.items || [])
       } else if (tab === 'requests') {
-        const response = await fetch(`/api/bookings?ownerId=${userId}`)
+        const response = await fetch(`/api/bookings?ownerId=${effectiveUserId}`)
         const data = await response.json()
         const bookings = data.bookings || []
         setIncomingRequests(bookings)
         // Count pending requests
         setPendingCount(bookings.filter((b: BookingWithRelations) => b.status === 'PENDING').length)
       } else if (tab === 'rentals') {
-        const response = await fetch(`/api/bookings?renterId=${userId}`)
+        const response = await fetch(`/api/bookings?renterId=${effectiveUserId}`)
         const data = await response.json()
         setMyRentals(data.bookings || [])
       } else if (tab === 'messages') {
-        const response = await fetch(`/api/messages?userId=${userId}`)
+        const response = await fetch(`/api/messages?userId=${effectiveUserId}`)
         const data = await response.json()
         setConversations(data.conversations || [])
         
@@ -115,9 +141,12 @@ export default function DashboardPage() {
   
   // Fetch pending count and unread messages on mount for notification badges
   useEffect(() => {
-    if (userId) {
+    const fetchCounts = async () => {
+      const effectiveUserId = await getEffectiveUserId()
+      if (!effectiveUserId) return
+
       // Fetch pending requests count
-      fetch(`/api/bookings?ownerId=${userId}`)
+      fetch(`/api/bookings?ownerId=${effectiveUserId}`)
         .then(res => res.json())
         .then(data => {
           const bookings = data.bookings || []
@@ -126,7 +155,7 @@ export default function DashboardPage() {
         .catch(err => console.error('Error fetching pending count:', err))
       
       // Fetch unread messages count
-      fetch(`/api/messages?userId=${userId}`)
+      fetch(`/api/messages?userId=${effectiveUserId}`)
         .then(res => res.json())
         .then(data => {
           const unread = (data.conversations || []).reduce((sum: number, conv: Conversation) => {
@@ -136,6 +165,8 @@ export default function DashboardPage() {
         })
         .catch(err => console.error('Error fetching unread count:', err))
     }
+    
+    fetchCounts()
   }, [userId])
 
   // Watch for URL parameter changes and update state accordingly
@@ -172,6 +203,13 @@ export default function DashboardPage() {
     setIsSubmitting(true)
 
     try {
+      const effectiveUserId = await getEffectiveUserId()
+      if (!effectiveUserId) {
+        alert('Unable to create item. Please try again.')
+        setIsSubmitting(false)
+        return
+      }
+
       const response = await fetch('/api/items', {
         method: 'POST',
         headers: {
@@ -180,7 +218,7 @@ export default function DashboardPage() {
         body: JSON.stringify({
           ...formData,
           pricePerDay: parseFloat(formData.pricePerDay),
-          ownerId: userId,
+          ownerId: effectiveUserId,
         }),
       })
 
@@ -231,11 +269,14 @@ export default function DashboardPage() {
       setSelectedConversation(bookingId)
       
       // Mark messages as read
-      await fetch('/api/messages', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingId, userId }),
-      })
+      const effectiveUserId = await getEffectiveUserId()
+      if (effectiveUserId) {
+        await fetch('/api/messages', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bookingId, userId: effectiveUserId }),
+        })
+      }
       
       // Update unread count
       setUnreadCount(prev => {
@@ -253,11 +294,18 @@ export default function DashboardPage() {
     
     setSendingMessage(true)
     try {
+      const effectiveUserId = await getEffectiveUserId()
+      if (!effectiveUserId) {
+        alert('Unable to send message. Please try again.')
+        setSendingMessage(false)
+        return
+      }
+
       const conversation = conversations.find(c => c.id === selectedConversation)
       if (!conversation) return
       
       // Determine receiver (the other party in the booking)
-      const isOwner = conversation.item.ownerId === userId
+      const isOwner = conversation.item.ownerId === effectiveUserId
       const receiverId = isOwner ? conversation.renterId : conversation.item.ownerId
       
       const response = await fetch('/api/messages', {
@@ -265,7 +313,7 @@ export default function DashboardPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           bookingId: selectedConversation,
-          senderId: userId,
+          senderId: effectiveUserId,
           receiverId,
           content: newMessage,
         }),
@@ -369,26 +417,8 @@ export default function DashboardPage() {
     ? myRentals
     : myRentals.filter(b => b.status === statusFilter)
 
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/login')
-    }
-  }, [status, router])
-  
-  // Render loading state
-  if (status === 'loading') {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    )
-  }
-
-  // Render null if no user
-  if (!userId) {
-    return null
-  }
+  // In demo mode, we don't require authentication
+  // The component will work with or without a session
 
   return (
     <div className="min-h-screen bg-gray-50">

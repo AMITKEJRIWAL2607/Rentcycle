@@ -20,36 +20,34 @@ export default function Header() {
             >
               Browse Items
             </Link>
+            <Link
+              href="/dashboard"
+              className="text-gray-700 hover:text-gray-900 font-medium"
+            >
+              Dashboard
+            </Link>
             {status === 'authenticated' ? (
-              <>
-                <Link
-                  href="/dashboard"
+              <div className="flex items-center gap-4">
+                {session.user?.image ? (
+                  <img
+                    src={session.user.image}
+                    alt={session.user.name || 'User'}
+                    className="w-8 h-8 rounded-full"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                    <span className="text-blue-600 text-sm font-semibold">
+                      {session.user?.name?.charAt(0).toUpperCase() || 'U'}
+                    </span>
+                  </div>
+                )}
+                <button
+                  onClick={() => signOut({ callbackUrl: '/' })}
                   className="text-gray-700 hover:text-gray-900 font-medium"
                 >
-                  Dashboard
-                </Link>
-                <div className="flex items-center gap-4">
-                  {session.user?.image ? (
-                    <img
-                      src={session.user.image}
-                      alt={session.user.name || 'User'}
-                      className="w-8 h-8 rounded-full"
-                    />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                      <span className="text-blue-600 text-sm font-semibold">
-                        {session.user?.name?.charAt(0).toUpperCase() || 'U'}
-                      </span>
-                    </div>
-                  )}
-                  <button
-                    onClick={() => signOut({ callbackUrl: '/' })}
-                    className="text-gray-700 hover:text-gray-900 font-medium"
-                  >
-                    Sign Out
-                  </button>
-                </div>
-              </>
+                  Sign Out
+                </button>
+              </div>
             ) : (
               <Link
                 href="/login"

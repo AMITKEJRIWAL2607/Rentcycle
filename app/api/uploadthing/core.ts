@@ -10,16 +10,26 @@ export const ourFileRouter = {
         // Use the new auth() helper from NextAuth v5
         const session = await auth();
         
+        // In demo mode, use demo user if no session
         if (!session || !session.user) {
-          console.error("UploadThing: No session found");
-          throw new Error("Unauthorized - Please sign in");
+          const { getDemoUserId } = await import('@/lib/demo-user');
+          const demoUserId = await getDemoUserId();
+          console.log("UploadThing: Using demo user:", demoUserId);
+          return { userId: demoUserId };
         }
         
         console.log("UploadThing: Authorized user:", session.user.id);
         return { userId: session.user.id };
       } catch (error) {
         console.error("UploadThing middleware error:", error);
-        throw new Error("Unauthorized - Please sign in to upload images");
+        // In demo mode, try to use demo user as fallback
+        try {
+          const { getDemoUserId } = await import('@/lib/demo-user');
+          const demoUserId = await getDemoUserId();
+          return { userId: demoUserId };
+        } catch (demoError) {
+          throw new Error("Unauthorized - Please sign in to upload images");
+        }
       }
     })
     .onUploadComplete(async ({ metadata, file }) => {

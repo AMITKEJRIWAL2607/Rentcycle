@@ -84,16 +84,21 @@ export default function ItemDetailPage() {
     const days = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
     const totalPrice = days * (item?.pricePerDay || 0)
 
-    if (!session?.user?.id) {
-      alert('Please sign in to request a rental')
-      router.push('/login')
-      return
+    // In demo mode, use demo user if no session
+    let renterId = session?.user?.id
+    if (!renterId) {
+      try {
+        const response = await fetch('/api/demo-user')
+        const data = await response.json()
+        renterId = data.userId
+      } catch (error) {
+        alert('Unable to create booking. Please try again.')
+        return
+      }
     }
 
     try {
       setIsRequesting(true)
-      
-      const renterId = session.user.id
 
       const response = await fetch('/api/bookings', {
         method: 'POST',
