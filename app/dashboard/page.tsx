@@ -27,7 +27,10 @@ interface Message {
   receiver: Pick<User, 'id' | 'name' | 'email' | 'image'>
 }
 
-interface Conversation extends BookingWithRelations {
+interface Conversation extends Omit<BookingWithRelations, 'item'> {
+  item: ItemWithOwner & {
+    owner: Pick<User, 'id' | 'name' | 'email' | 'image'>
+  }
   messages: Message[]
   _count: {
     messages: number
