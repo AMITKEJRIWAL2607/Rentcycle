@@ -70,25 +70,7 @@ export default function DashboardPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [uploadingImages, setUploadingImages] = useState(false)
   
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/login')
-    }
-  }, [status, router])
-  
-  if (status === 'loading') {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    )
-  }
-
-  if (!userId) {
-    return null
-  }
-
+  // All hooks must be called before any conditional returns
   const fetchDashboardData = useCallback(async (tab: TabType) => {
     if (!userId || tab === 'list') return
     
@@ -357,6 +339,27 @@ export default function DashboardPage() {
   const filteredRentals = statusFilter === 'all'
     ? myRentals
     : myRentals.filter(b => b.status === statusFilter)
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/login')
+    }
+  }, [status, router])
+  
+  // Render loading state
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
+  // Render null if no user
+  if (!userId) {
+    return null
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
