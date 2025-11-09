@@ -7,6 +7,8 @@ import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 
 // NextAuth v5 configuration
+// Note: PrismaAdapter is lazy - it won't connect to database during build
+// It only connects when auth operations are performed at runtime
 export const authConfig: NextAuthConfig = {
   adapter: PrismaAdapter(prisma),
   providers: [

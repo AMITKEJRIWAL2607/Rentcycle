@@ -8,26 +8,44 @@ export const ourFileRouter = {
     .middleware(async ({ req }) => {
       try {
         // Use the new auth() helper from NextAuth v5
+        // This only runs at runtime when an upload request is made, not during build
         const session = await auth();
         
         // In demo mode, use demo user if no session
         if (!session || !session.user) {
-          const { getDemoUserId } = await import('@/lib/demo-user');
-          const demoUserId = await getDemoUserId();
-          console.log("UploadThing: Using demo user:", demoUserId);
-          return { userId: demoUserId };
+          try {
+            const { getDemoUserId } = await import('@/lib/demo-user');
+            const demoUserId = await getDemoUserId();
+            console.log("UploadThing: Using demo user:", demoUserId);
+            return { userId: demoUserId };
+          } catch (demoError: any) {
+            // If database connection fails, require authentication
+            if (demoError?.code === 'P1001' || demoError?.message?.includes("Can't reach database")) {
+              console.error("UploadThing: Database unavailable, requiring authentication:", demoError.message);
+              throw new Error("Please sign in to upload images - database connection unavailable");
+            }
+            throw demoError;
+          }
         }
         
         console.log("UploadThing: Authorized user:", session.user.id);
         return { userId: session.user.id };
-      } catch (error) {
+      } catch (error: any) {
         console.error("UploadThing middleware error:", error);
-        // In demo mode, try to use demo user as fallback
+        // If database connection error, require authentication instead of demo user
+        if (error?.code === 'P1001' || error?.message?.includes("Can't reach database")) {
+          throw new Error("Unauthorized - Please sign in to upload images");
+        }
+        // In demo mode, try to use demo user as fallback (only at runtime)
         try {
           const { getDemoUserId } = await import('@/lib/demo-user');
           const demoUserId = await getDemoUserId();
           return { userId: demoUserId };
-        } catch (demoError) {
+        } catch (demoError: any) {
+          // If demo user also fails due to database, require auth
+          if (demoError?.code === 'P1001' || demoError?.message?.includes("Can't reach database")) {
+            throw new Error("Unauthorized - Please sign in to upload images");
+          }
           throw new Error("Unauthorized - Please sign in to upload images");
         }
       }

@@ -5,6 +5,7 @@ const DEMO_USER_EMAIL = 'demo@rentcycle.com'
 /**
  * Gets or creates a demo user for demo mode
  * This allows the app to function without authentication
+ * This function should ONLY be called at runtime in API routes, never during build
  */
 export async function getOrCreateDemoUser() {
   try {
@@ -25,7 +26,14 @@ export async function getOrCreateDemoUser() {
     }
 
     return demoUser
-  } catch (error) {
+  } catch (error: any) {
+    // Handle connection errors gracefully
+    // If this is a connection error, it might be during build or database unavailable
+    if (error?.code === 'P1001' || error?.message?.includes("Can't reach database")) {
+      console.warn('Database connection error in getOrCreateDemoUser - this should only happen at runtime:', error.message)
+      // Re-throw so the API route can handle it properly
+      throw new Error('Database connection unavailable - please ensure DATABASE_URL is set and database is accessible')
+    }
     console.error('Error getting/creating demo user:', error)
     throw error
   }
