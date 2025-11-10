@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server'
 import { getOrCreateDemoUser } from '@/lib/demo-user'
 
+// Force this route to be dynamic - prevents Next.js from trying to pre-render it during build
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 /**
  * API route to get or create demo user
  * Used in demo mode when no authenticated session exists
+ * This route is marked as dynamic to prevent static generation during build
  */
 export async function GET() {
   try {
